@@ -1,0 +1,9 @@
+#!/bin/sh
+# this hack assumes that there will only be one kernel installed at install time, which is usually true (not using `uname -r` because FAI network boot may run on a different kernel than is installed on the machine)
+
+# shamelessly stolen from the linux-image-extra package
+kernel=$(dpkg  -l | awk '/^ii[ ]+(linux|kfreebsd|gnumach)-image-[0-9]/ && $2 !~ /-dbg$/ { print $2 }' | sed -e 's#\(linux\|kfreebsd\|gnumach\)-image-##')
+
+depmod -a -F /boot/System.map-$kernel $kernel || true
+grep -q can4linux /etc/modules || echo can4linux >> /etc/modules
+modprobe can4linux && service cansetup start || true

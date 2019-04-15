@@ -1,0 +1,11 @@
+--- a/can4linux/Makefile-standard 2015-06-05 10:51:34.947231558 +0200
++++ b/can4linux/Makefile-standard 2015-06-05 10:56:20.664936696 +0200
+@@ -203,7 +203,7 @@ DEBUG=DEBUG=1
+ ifeq "$(TARGET)" "CPC_PCI"
+ # EMS W�nsche CPC-PCI PeliCAN  PCI (only with SJA1000) ------------------------
+ # http://www.ems-wuensche.com
+-DEFS =  -D$(TARGET) -D$(DEBUG) -DDEFAULT_DEBUG -DCAN_MAJOR=$(CAN_MAJOR)\
++DEFS =  -D$(TARGET) -DCAN_MAJOR=$(CAN_MAJOR)\
+ 	-DCAN4LINUX_PCI \
+ 	-DCAN_MAX_CHANNELS=4 -DCAN_MAX_OPEN=4 -DCAN_SYSCLK=8 \
+ 	-DCANFD

@@ -1,0 +1,37 @@
+--- a/can4linux/pcm3680.c	2014-07-30 12:31:32.238868829 +0200
++++ b/can4linux/pcm3680.c	2014-07-30 12:39:24.014872196 +0200
+@@ -9,6 +9,7 @@
+ 
+ #include <linux/irq.h>
+ #include <asm/irq.h>
++#include <linux/delay.h>
+ 
+ 
+ /* check memory region if there is a CAN controller
+@@ -133,15 +134,17 @@ int CAN_VendorInit (int minor)
+     /* now the virtual address can be used for the register access macros */
+ 
+ 
+-    if( Base[minor] & 0x200 ) {
+-	    /* printk("Resetting Advantech Pcm-3680 [contr 1]\n"); */
+-	    /* perform HW reset 2. contr*/
+-	    writeb(0xff, can_base[minor] + 0x300);
+-    } else {
+-	    /* printk("Resetting Advantech Pcm-3680 [contr 0]\n"); */
+-	    /* perform HW reset 1. contr*/
+-	    writeb(0xff, can_base[minor] + 0x100);
+-    }
++///* this breaks Incostartech's hardware
++//    if( Base[minor] & 0x200 ) {
++//	    /* printk("Resetting Advantech Pcm-3680 [contr 1]\n"); */
++//	    /* perform HW reset 2. contr*/
++//	    writeb(0xff, can_base[minor] + 0x300);
++//    } else {
++//	    /* printk("Resetting Advantech Pcm-3680 [contr 0]\n"); */
++//	    /* perform HW reset 1. contr*/
++//	    writeb(0xff, can_base[minor] + 0x100);
++//    }
++//*/
+     mdelay(100);
+ 
+ 

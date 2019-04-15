@@ -1,0 +1,565 @@
+From ed068ed1353bc77944a3c653b13d4d8663d9d825 Mon Sep 17 00:00:00 2001
+From: Benjamin Lamowski <benjamin@lamowski.net>
+Date: Thu, 21 Aug 2014 14:05:00 +0200
+Subject: [PATCH] Revert "- removed a lot of sparse and some gcc warnings"
+
+Just resolved the conflict using the parent's (r236) logic.
+
+Conflicts:
+	can4linux/imx35funcs.c
+---
+ can4linux/imx35.h        | 30 ++++++++------------
+ can4linux/imx35flexcan.h |  2 +-
+ can4linux/imx35funcs.c   | 71 +++++++++++++-----------------------------------
+ can4linux/ioctl.c        | 40 +++++++++++++--------------
+ can4linux/read.c         |  4 +--
+ can4linux/write.c        | 33 ++++++----------------
+ 6 files changed, 62 insertions(+), 118 deletions(-)
+
+diff --git a/can4linux/imx35.h b/can4linux/imx35.h
+index 023daef..5e4da01 100644
+--- a/can4linux/imx35.h
++++ b/can4linux/imx35.h
+@@ -2,12 +2,6 @@
+ /* hardware access functions or macros */
+ /************************************************************************/
+ 
+-/* we are using the following functions
+- static inline void __raw_writel(u32 b, volatile void __iomem *addr)
+- static inline u32 __raw_readl(const volatile void __iomem *addr)
+-
+- do acess the iomem
+-*/
+ 
+ #ifndef  _IMX35_H_
+ #define  _IMX35_H_
+@@ -15,34 +9,32 @@
+ 
+ /* Memory word access, 16 bit */
+ #define CANinw(bd,adr)          \
+-                (__raw_readw ((void const volatile __iomem *)&((flexcan_t __iomem *)can_base[bd])->adr  ))
++                (__raw_readw (&((flexcan_t *)can_base[bd])->adr  ))
+ 
+ 
+ /* Memory long word access */
+-#if 0  /*debug version using printk to inform the programmer */
++#if 0
+ #define CANoutl(bd,adr,v)       do { \
+ 	printk(" write 0x%08x to %p\n", v, &((flexcan_t *)can_base[bd])->adr);\
+-                (__raw_writel(v, (void volatile __iomem *)&((flexcan_t __iomem *)can_base[bd])->adr ));\
++                (__raw_writel(v, __iomem  &((flexcan_t *)can_base[bd])->adr ));\
+                 } while(0)
+ #endif
+-
+ #define CANoutl(bd,adr,v)	\
+-                (__raw_writel(v, (void volatile __iomem *)&((flexcan_t __iomem *)can_base[bd])->adr ))
++                (__raw_writel(v, __iomem  &((flexcan_t *)can_base[bd])->adr ))
+ 
+ #define CANsetl(bd,adr,m)       \
+-        __raw_writel((__raw_readl((void const volatile __iomem *)&((flexcan_t __iomem *)can_base[bd])->adr)) \
+-                | (m) , (void volatile __iomem *)&((flexcan_t __iomem *)can_base[bd])->adr )
++        __raw_writel((__raw_readl((u32) &((flexcan_t *)can_base[bd])->adr)) \
++                | (m) , (u32) &((flexcan_t *)can_base[bd])->adr )
+ 
+ #define CANresetl(bd,adr,m)     \
+-        __raw_writel((__raw_readl((void const volatile __iomem *)&((flexcan_t __iomem *)can_base[bd])->adr)) \
+-                & ~(m) , (void volatile __iomem *)&((flexcan_t __iomem *)can_base[bd])->adr )
++        __raw_writel((__raw_readl((u32) &((flexcan_t *)can_base[bd])->adr)) \
++                & ~(m), (u32) &((flexcan_t *)can_base[bd])->adr )
+ 
+-#define CANinl(bd,adr)  ( __raw_readl(       		\
+-	  (void const volatile __iomem *)&((flexcan_t __iomem *)(can_base[bd]))->adr)  			\
+-	)
++#define CANinl(bd,adr)          \
++                (__raw_readl ((u32) &((flexcan_t *)can_base[bd])->adr  ))
+ 
+ #define CANtestl(bd,adr,m)      \
+-        (__raw_readl( (void const volatile __iomem *)&((flexcan_t *)can_base[bd])->adr  ) & (m) )
++        (__raw_readl((u32) &((flexcan_t *)can_base[bd])->adr  ) & (m) )
+ 
+ #endif          /* _IMX35_H_ */
+ 
+diff --git a/can4linux/imx35flexcan.h b/can4linux/imx35flexcan.h
+index a3b83da..f2183df 100644
+--- a/can4linux/imx35flexcan.h
++++ b/can4linux/imx35flexcan.h
+@@ -273,7 +273,7 @@ struct can_obj {
+ 
+ /* CAN object definition */
+ #define CAN_OBJ \
+-   ((struct can_obj volatile __iomem *) (((void __iomem *)can_base[minor]) + 0x80))
++   ((struct can_obj volatile *) (((void *)can_base[minor]) + 0x80))
+ 
+ /*
+  * the above definition can be used as follows:
+diff --git a/can4linux/imx35funcs.c b/can4linux/imx35funcs.c
+index 5af5b99..68f125f 100644
+--- a/can4linux/imx35funcs.c
++++ b/can4linux/imx35funcs.c
+@@ -41,9 +41,6 @@
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0)
+ # error use this ARM  FLexCAN only with Kernel > 2.6
+ #endif
+-#if defined(__BIG_ENDIAN)
+-# error not tested on BIG_ENDIAn yet
+-#endif
+ 
+ 
+ 
+@@ -459,7 +456,7 @@ u32 reg;
+     __raw_writel( 0x00000000, can_base[minor] + (0xE0 + 24));
+     __raw_writel( 0x00000000, can_base[minor] + (0xE0 + 28));
+ 
+-    memset_io(can_base[minor] + 0x0E0, 0,
++    memset(can_base[minor] + 0x0E0, 0,
+     	sizeof(unsigned int) * FLEXCAN_MAX_FILTER);
+ 
+ 
+@@ -493,7 +490,7 @@ u32 reg;
+     __raw_writel( 0x00000000, can_base[minor] + (0x0880 + 24));
+     __raw_writel( 0x00000000, can_base[minor] + (0x0880 + 28));
+ 
+-    memset_io(can_base[minor] + 0x0880, 0,
++    memset(can_base[minor] + 0x0880, 0,
+     	sizeof(unsigned int) * FLEXCAN_MAX_MB);
+ 
+     /* Interrupts on Rx, TX, any Status change and data overrun */
+@@ -660,6 +657,7 @@ u32 code = 0;
+     Or check if TX mb is inactive 
+     */
+ #if defined(OLD_MBOX_TEST)  /* old */ 
++    
+     while (
+     	    ((stat = CANinl(minor, estat)) & (CAN_ESTAT_IDLE + CAN_ESTAT_TX_RX))
+     	    == CAN_ESTAT_TX_RX
+@@ -685,21 +683,14 @@ IDLE This bit indicates when CAN bus is in IDLE state.
+ 	code = (ctl_status >> 24) & 0x0F;
+ 	pr_info("ctl_status: 0x%08x,  code 0x%01x\n", ctl_status, code);
+ 	if (    stat == CAN_ESTAT_TX_RX
+-		/* if CAN is still in active/progress */
+-	     || (code != 0b1000 && code != 0b1001 && code != 0)) {
+-	        /* or 
+-		   0b1000 INACTIVE: MB does not participate in the arbitration process.
+-		   0b1001 ABORT: MB was configured as Tx and CPU aborted the transmission.
+-		    This code is only valid when AEN bit in MCR is asserted. MB does
+-		    not participate in the arbitration process.
+-		   0b0000  
+-		   */
+-
+-		cond_resched();
++	     || (code != 0b1000 && code != 0b1001 && code != 0))
++		// cond_resched();
+ 		;
+-	} else {
+-	    break;
+-	}
++	else
++
++
++
++		break;
+     } while (1);
+ 
+ #endif
+@@ -716,35 +707,25 @@ IDLE This bit indicates when CAN bus is in IDLE state.
+     /* fill the frame info and identifier fields , ID-Low and ID-High */
+     if(tx->flags & MSG_EXT) {
+     	/* use ID in extended message format */
++	DBGprint(DBG_DATA, ("---> send ext message \n"));
+ 	if( tx->flags & MSG_RTR) {
+-	    DBGprint(DBG_DATA, ("---> send rtr extended frame\n"));
+ 	    CAN_WRITE_XOID_RTR(TRANSMIT_OBJ, tx->id);
+ 	} else {
+-	    DBGprint(DBG_DATA, ("---> send data extended frame\n"));
+ 	    CAN_WRITE_XOID(TRANSMIT_OBJ, tx->id);
+ 	}
+     } else {
++	DBGprint(DBG_DATA, ("---> send std message \n"));
+ 	if( tx->flags & MSG_RTR) {
+-	    DBGprint(DBG_DATA, ("---> send rtr base frame\n"));
+ 	    CAN_WRITE_OID_RTR(TRANSMIT_OBJ, tx->id);
+ 	} else {
+-	    DBGprint(DBG_DATA, ("---> send data base frame\n"));
+ 	    CAN_WRITE_OID(TRANSMIT_OBJ, tx->id);
+ 	}
+     }
+ 
+     /* - fill data ---------------------------------------------------- */
+-    /* only two 4 byte access are necessarry
+-     * instead of a for() loop 
+-     * u32 data = be32_to_cpup((__be32 *)&tx->data[0]);
+-	flexcan_write(data, &regs->cantxfg[FLEXCAN_TX_BUF_ID].data[0]);
+-     * can be better
+-     */
+-
+     /* using 
+ 	 flexcan_memcpy(void *dst, void *src, int len)
+ 	*/
+-    /** FIXME sparse */
+     flexcan_memcpy((void *)CAN_OBJ[TRANSMIT_OBJ].msg, tx->data, tx->length);
+ 
+ 
+@@ -761,7 +742,7 @@ IDLE This bit indicates when CAN bus is in IDLE state.
+  * is called by an ioctl() Call 
+  * but not supported in this FlexCAN driver
+  */
+-int CAN_GetMessage (int minor, canmsg_t *rx)
++int CAN_GetMessage (int minor, canmsg_t *rx )
+ {
+     DBGin();
+ 	DBGprint(DBG_ENTRY, ("CAN_GetMessage() not implemented\n"));
+@@ -776,7 +757,6 @@ in the rx fifo of the receiving process
+ */
+ static void fill_errorframe(int minor, int flags) {
+ int		rx_fifo;
+-int		head;
+ msg_fifo_t	*RxFifo;
+ 
+ 
+@@ -791,8 +771,7 @@ msg_fifo_t	*RxFifo;
+ 		    RxFifo->status = BUF_OK;
+ 
+ 		    /* handle fifo wrap around */
+-		    head = ++(RxFifo->head) % MAX_BUFSIZE;
+-		    RxFifo->head = head;
++		    RxFifo->head = ++(RxFifo->head) % MAX_BUFSIZE;
+ 		    if(unlikely(RxFifo->head == RxFifo->tail)) {
+ 			pr_info("CAN[%d][%d] Rx: FIFO overrun\n", minor, rx_fifo);
+ 			RxFifo->status = BUF_OVERRUN;
+@@ -1092,7 +1071,6 @@ signalling the ERROR PASSIVE flag to the application.
+     /* handle all subscribed rx fifos */
+ 
+     for(rx_fifo = 0; rx_fifo < CAN_MAX_OPEN; rx_fifo++) {
+-	int head;
+ 	/* for every rx fifo */
+ 	if (CanWaitFlag[minor][rx_fifo] == 1) {
+ 	    /* this FIFO is in use */
+@@ -1105,7 +1083,6 @@ signalling the ERROR PASSIVE flag to the application.
+ 	    (RxFifo->data[RxFifo->head]).length = length;
+ 	    /* copy data */
+ 	    length %= 9;	/* limit count to 8 bytes */
+-    /** FIXME sparse */
+ 	    /* void flexcan_memcpy(void *dst, void *src, int len) */
+ 	    flexcan_memcpy(
+ 		(void *)&(RxFifo->data[RxFifo->head]).data[0],
+@@ -1115,8 +1092,7 @@ signalling the ERROR PASSIVE flag to the application.
+ 	    /* mark just written entry as OK and full */
+ 	    RxFifo->status = BUF_OK;
+ 	    /* Handle buffer wrap-around */
+-	    head = ++(RxFifo->head) % MAX_BUFSIZE;
+-	    RxFifo->head = head;
++	    RxFifo->head = ++(RxFifo->head) % MAX_BUFSIZE;
+ 	    if(unlikely(RxFifo->head == RxFifo->tail)) {
+ 		    pr_err("CAN[%d][%d] RX: SW FIFO overrun\n", minor, rx_fifo);
+ 		    RxFifo->status = BUF_OVERRUN;
+@@ -1200,22 +1176,20 @@ ResetRXInt:
+ 	if( (TxFifo->data[TxFifo->tail]).flags & MSG_EXT ) {
+ 
+ 	    /* use ID in extended message format */
++	    DBGprint(DBG_DATA, ("---> send ext message \n"));
+ 	    if( (TxFifo->data[TxFifo->tail]).flags & MSG_RTR) {
+-		DBGprint(DBG_DATA, ("---> send rtr extended frame\n"));
+ 		CAN_WRITE_XOID_RTR(TRANSMIT_OBJ,
+ 		    	(TxFifo->data[TxFifo->tail]).id);
+ 	    } else {
+-		DBGprint(DBG_DATA, ("---> send data extended frame\n"));
+ 		CAN_WRITE_XOID(TRANSMIT_OBJ,
+ 		    	(TxFifo->data[TxFifo->tail]).id);
+ 	    }
+ 	} else {
++	    DBGprint(DBG_DATA, ("---> send std message \n"));
+ 	    if( (TxFifo->data[TxFifo->tail]).flags & MSG_RTR) {
+-	    DBGprint(DBG_DATA, ("---> send rtr base frame\n"));
+ 		CAN_WRITE_OID_RTR(TRANSMIT_OBJ,
+ 		    	(TxFifo->data[TxFifo->tail]).id);
+ 	    } else {
+-	    DBGprint(DBG_DATA, ("---> send data base frame\n"));
+ 		CAN_WRITE_OID(TRANSMIT_OBJ,
+ 		    	(TxFifo->data[TxFifo->tail]).id);
+ 	    }
+@@ -1225,7 +1199,6 @@ ResetRXInt:
+ 	/* using 
+ 	     flexcan_memcpy(void *dst, void *src, int len)
+ 	    */
+-    /** FIXME sparse */
+ 	flexcan_memcpy((void *)CAN_OBJ[TRANSMIT_OBJ].msg,
+ 		(void *)&(TxFifo->data[TxFifo->tail]).data[0],
+ 		(TxFifo->data[TxFifo->tail]).length);
+@@ -1235,11 +1208,7 @@ ResetRXInt:
+ 		(TxFifo->data[TxFifo->tail]).length);
+ 
+ 	TxFifo->free[TxFifo->tail] = BUF_EMPTY; /* now this entry is EMPTY */
+-	{
+-	int tail;
+-	    tail = ++(RxFifo->head) % MAX_BUFSIZE;
+-	    RxFifo->tail = tail;
+-	}
++	TxFifo->tail = ++(TxFifo->tail) % MAX_BUFSIZE;
+ 
+ 	/* leave critical section */
+ 	local_irq_restore(flags);
+@@ -1259,11 +1228,10 @@ Tx_done:
+     return IRQ_RETVAL(IRQ_HANDLED);
+ }
+ 
+-#if 0
+ /* dump all FlexCAN module registers, use printk */
+ void CAN_register_dump(int minor)
+ {
+-volatile flexcan_t __iomem *flexcan = (volatile flexcan_t __iomem *)can_base[minor];
++volatile flexcan_t *flexcan = (flexcan_t *)can_base[minor];
+ u32 reg;
+ 
+     pr_info("Flex CAN register layout, size 0x%02x bytes\n", sizeof(flexcan_t));
+@@ -1348,4 +1316,3 @@ volatile u32 *cpx =
+ 		(vh >> 18) & CAN_BFF_MASK);
+     }
+ }
+-#endif
+diff --git a/can4linux/ioctl.c b/can4linux/ioctl.c
+index 922d16b..3427736 100644
+--- a/can4linux/ioctl.c
++++ b/can4linux/ioctl.c
+@@ -34,7 +34,7 @@
+ #include "defs.h"
+ 
+ int can_Command(struct inode *inode, struct file *file, Command_par_t * argp);
+-int can_Send(struct inode *inode, canmsg_t __user *Tx);
++int can_Send(struct inode *inode, canmsg_t *Tx);
+ int can_GetStat(struct inode *inode, struct file *file, CanStatusPar_t *s);
+ int can_GetStatVirt(struct inode *inode, struct file *file, CanStatusPar_t *s);
+ int can_Config(struct inode *inode, struct file *file, int target,
+@@ -280,39 +280,39 @@ unsigned int minor = __LDDK_MINOR;
+   switch(cmd){
+ 
+         case CAN_IOCTL_COMMAND:
+-	  if( !access_ok(VERIFY_READ, (void __user *)arg, sizeof(Command_par_t))) {
++	  if( !access_ok(VERIFY_READ, (void *)arg, sizeof(Command_par_t))) {
+ 	     DBGout(); return(retval); 
+ 	  }
+-	  if( !access_ok(VERIFY_WRITE, (void __user *)arg, sizeof(Command_par_t))) {
++	  if( !access_ok(VERIFY_WRITE, (void *)arg, sizeof(Command_par_t))) {
+ 	     DBGout(); return(retval); 
+ 	  }
+ 	  argp = (void *) kmalloc( sizeof(Command_par_t) +1 , GFP_KERNEL );
+-	  __lddk_copy_from_user( (void *)argp, (Command_par_t __user *)arg,
++	  __lddk_copy_from_user( (void *)argp, (Command_par_t *)arg,
+ 	  					sizeof(Command_par_t));
+ 	  ((Command_par_t *) argp)->retval =
+ 	  		can_Command(inode, file, (Command_par_t *)argp);
+ 	  ((Command_par_t *) argp)->error = Can_errno;
+-	  __lddk_copy_to_user( (Command_par_t __user *)arg, (void *)argp,
++	  __lddk_copy_to_user( (Command_par_t *)arg, (void *)argp,
+ 	  					sizeof(Command_par_t));
+ 	  kfree(argp);
+ 	  ret = 0;
+ 	  break;
+       case CAN_IOCTL_CONFIG:
+-	  if( !access_ok(VERIFY_READ, (void __user *)arg, sizeof(Config_par_t))) {
++	  if( !access_ok(VERIFY_READ, (void *)arg, sizeof(Config_par_t))) {
+ 	     DBGout(); return(retval); 
+ 	  }
+-	  if( !access_ok(VERIFY_WRITE, (void __user *)arg, sizeof(Config_par_t))) {
++	  if( !access_ok(VERIFY_WRITE, (void *)arg, sizeof(Config_par_t))) {
+ 	     DBGout(); return(retval); 
+ 	  }
+ 	  argp = (void *) kmalloc( sizeof(Config_par_t) +1 ,GFP_KERNEL);
+-	  __lddk_copy_from_user( (void *)argp, (Config_par_t __user *)arg,
++	  __lddk_copy_from_user( (void *)argp, (Config_par_t *)arg,
+ 	  					sizeof(Config_par_t));
+ 	  retval = can_Config(inode, file, ((Config_par_t *)argp)->target, 
+ 			     ((Config_par_t *)argp)->val1,
+ 			     ((Config_par_t *)argp)->val2 );
+ 	  ((Config_par_t *) argp)->retval = retval;
+ 	  ((Config_par_t *) argp)->error = Can_errno;
+-	  __lddk_copy_to_user( (Config_par_t __user *)arg, (void *)argp,
++	  __lddk_copy_to_user( (Config_par_t *)arg, (void *)argp,
+ 	  					sizeof(Config_par_t));
+ 	  kfree(argp);
+ 	  if (0 != retval) {
+@@ -322,19 +322,19 @@ unsigned int minor = __LDDK_MINOR;
+ 	  }
+ 	  break;
+       case CAN_IOCTL_SEND:
+-	  if( !access_ok(VERIFY_READ, (void __user *)arg, sizeof(Send_par_t))) {
++	  if( !access_ok(VERIFY_READ, (void *)arg, sizeof(Send_par_t))) {
+ 	     DBGout(); return(retval); 
+ 	  }
+-	  if( !access_ok(VERIFY_WRITE, (void __user *)arg, sizeof(Send_par_t))) {
++	  if( !access_ok(VERIFY_WRITE, (void *)arg, sizeof(Send_par_t))) {
+ 	     DBGout(); return(retval); 
+ 	  }
+ 	  argp = (void *)kmalloc( sizeof(Send_par_t) +1 ,GFP_KERNEL );
+-	  __lddk_copy_from_user( (void *)argp, (Send_par_t __user *)arg,
++	  __lddk_copy_from_user( (void *)argp, (Send_par_t *)arg,
+ 	  				sizeof(Send_par_t));
+ 	  if(virtual == 0)  {
++
+ 	      ((Send_par_t *) argp)->retval =
+-			    can_Send(inode, 
+-				    (canmsg_t __user *)((Send_par_t *)argp)->Tx );
++			    can_Send(inode, ((Send_par_t *)argp)->Tx );
+ 	  } else {
+ 
+ 	      /* FIXME */
+@@ -342,17 +342,17 @@ unsigned int minor = __LDDK_MINOR;
+ 
+ 	  }
+ 	  ((Send_par_t *) argp)->error = Can_errno;
+-	  __lddk_copy_to_user( (Send_par_t __user *)arg, (void *)argp,
++	  __lddk_copy_to_user( (Send_par_t *)arg, (void *)argp,
+ 	  				sizeof(Send_par_t));
+ 	  kfree(argp);
+ 	  ret = 0;
+ 	  break;
+       case CAN_IOCTL_STATUS:
+-	  if( !access_ok(VERIFY_READ, (void __user *)arg,
++	  if( !access_ok(VERIFY_READ, (void *)arg,
+ 	  				sizeof(CanStatusPar_t))) {
+ 	     DBGout(); return(retval); 
+ 	  }
+-	  if( !access_ok(VERIFY_WRITE, (void __user *)arg,
++	  if( !access_ok(VERIFY_WRITE, (void *)arg,
+ 	  			sizeof(CanStatusPar_t))) {
+ 	     DBGout(); return(retval); 
+ 	  }
+@@ -369,7 +369,7 @@ unsigned int minor = __LDDK_MINOR;
+ 
+ 	  }
+ 
+-	  __lddk_copy_to_user( (CanStatusPar_t __user *)arg, (void *)argp,
++	  __lddk_copy_to_user( (CanStatusPar_t *)arg, (void *)argp,
+ 	  				sizeof(CanStatusPar_t));
+ 	  kfree(argp);
+ 	  ret  = 0;
+@@ -496,7 +496,7 @@ int su = ((struct _instance_data *)(file->private_data))->su;
+ }
+ 
+ /* is not very useful! use it if you are sure the tx queue is empty */
+-int can_Send(struct inode *inode, canmsg_t __user *Tx)
++int can_Send(struct inode *inode, canmsg_t *Tx)
+ {
+ unsigned int minor = iminor(inode);	
+ canmsg_t tx;
+@@ -507,7 +507,7 @@ unsigned long _cnt;
+     if( !access_ok(VERIFY_READ, Tx, sizeof(canmsg_t)) ) {
+ 	    return -EINVAL;
+     }
+-    __lddk_copy_from_user((canmsg_t *)&tx, (canmsg_t __user *)Tx, sizeof(canmsg_t));
++    __lddk_copy_from_user((canmsg_t *)&tx, (canmsg_t *)Tx, sizeof(canmsg_t));
+     return CAN_SendMessage(minor, &tx);
+ }
+ 
+diff --git a/can4linux/read.c b/can4linux/read.c
+index 8c08964..c9c5820 100644
+--- a/can4linux/read.c
++++ b/can4linux/read.c
+@@ -134,13 +134,13 @@ int rx_fifoindex =
+ 
+ /* msg_fifo_t *RxFifo = &Rx_Buf[minor][0]; */
+ msg_fifo_t *RxFifo = &Rx_Buf[minor][rx_fifoindex];
+-canmsg_t __user *addr; 
++canmsg_t *addr; 
+ 
+   DBGin();
+ 
+ 	/* printk(KERN_INFO " : reading in fifo[%d][%d]\n", minor, rx_fifoindex); */
+ 
+-	addr = (canmsg_t __user *)buffer;
++	addr = (canmsg_t *)buffer;
+ 	blocking = !(file->f_flags & O_NONBLOCK);
+ 	
+ 	if( !access_ok( VERIFY_WRITE, (void __user *)buffer, count * sizeof(canmsg_t) )) {
+diff --git a/can4linux/write.c b/can4linux/write.c
+index 0249904..816b824 100644
+--- a/can4linux/write.c
++++ b/can4linux/write.c
+@@ -29,7 +29,6 @@
+ * \author Heinz-Jürgen Oertel
+ *
+ */
+-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+ 
+ #include "defs.h"
+ #include <linux/sched.h>
+@@ -79,13 +78,12 @@ __LDDK_WRITE_TYPE can_write( __LDDK_WRITE_PARAM )
+ {
+ unsigned int minor = __LDDK_MINOR;
+ msg_fifo_t *TxFifo = &Tx_Buf[minor];
+-canmsg_t __user *addr;
++canmsg_t *addr;
+ canmsg_t tx;
+ unsigned long flags = 0;  /* still needed for local_irq_save() ? */
+ int written         = 0;
+ int blocking;
+ unsigned long _cnt;
+-int rxfifoindex; 
+ 
+ 
+     DBGin();
+@@ -100,21 +98,9 @@ int rxfifoindex;
+ 
+     DBGprint(DBG_DATA,(" -- write %d msg, blocking=%d", (int)count, blocking));
+     /* printk("w[%d/%d]", minor, TxFifo->active); */
+-    addr = (canmsg_t __user *)buffer;
+-#if 0
+-pr_info("ID 0x%lx \n", addr->id);
+-{
+-
+-    int i;
+-    printk("buffer %p, addr %p, addrp %p\n", &buffer, &addr, addr);
+-    for( i = 0; i < 32; i++) {
+-	printk("%2x ", buffer[i]);
+-    }
+-    printk("\n");
+-}
+-#endif
++    addr = (canmsg_t *)buffer;
+ 
+-    if(!access_ok(VERIFY_READ, buffer, count * sizeof(canmsg_t))) {
++    if(!access_ok(VERIFY_READ, (canmsg_t *)addr, count * sizeof(canmsg_t))) {
+ 	written = -EINVAL;
+ 	goto can_write_exit;
+     }
+@@ -148,7 +134,7 @@ pr_info("ID 0x%lx \n", addr->id);
+ 	     */
+ 	    __lddk_copy_from_user(
+ 		    (canmsg_t *) &tx, 
+-		    (canmsg_t __user *) &addr[written],
++		    (canmsg_t *) &addr[written],
+ 		    sizeof(canmsg_t) );
+ 
+ 	/* we are taking this as receive time stamp */
+@@ -253,16 +239,15 @@ pr_info("ID 0x%lx \n", addr->id);
+ 	 * This is used in the TX IRQ to decide in which receive queue
+ 	 * this message has to be copied (selfreception)
+ 	 */
+-	rxfifoindex = ((struct _instance_data *)&(file->private_data))->rx_index;
+-	put_user( rxfifoindex,  &addr[written].cob);
+-
++	addr[written].cob = 
++		(int16_t)((struct _instance_data *)(file->private_data))->rx_index;
+ 	if( TxFifo->active ) {
+ 	    /* more than one data and actual data in queue,
+-	     * add this message to the TX queue 
++	     * add this message to the Tx queue 
+ 	     */
+ 	    __lddk_copy_from_user(	/* copy one message to FIFO */
+ 		    (canmsg_t *) &(TxFifo->data[TxFifo->head]), 
+-		    (canmsg_t __user *) &addr[written],
++		    (canmsg_t *) &addr[written],
+ 		    sizeof(canmsg_t) );
+ 	    TxFifo->free[TxFifo->head] = BUF_FULL; /* now this entry is FULL */
+ 	    /* TxFifo->head = ++(TxFifo->head) % MAX_BUFSIZE; */
+@@ -273,7 +258,7 @@ pr_info("ID 0x%lx \n", addr->id);
+ 	    /* copy message into local canmsg_t structure */
+ 	    __lddk_copy_from_user(
+ 		    (canmsg_t *) &tx, 
+-		    (canmsg_t __user *) &addr[written],
++		    (canmsg_t *) &addr[written],
+ 		    sizeof(canmsg_t) );
+ 	    /* f - fast -- use interrupts */
+ 	    if( count >= 1 ) {
+-- 
+2.0.0
+
